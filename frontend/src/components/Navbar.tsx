@@ -1,4 +1,4 @@
-import { Menu, Users, Settings, Globe } from 'lucide-react'
+import { Menu, Settings, Globe } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
@@ -9,7 +9,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { ThemeToggle } from '@/components/ThemeToggle'
-import { useAuth } from '@/contexts/AuthContext'
 import { useUserPreferences } from '@/contexts/UserPreferencesContext'
 
 interface NavbarProps {
@@ -17,7 +16,6 @@ interface NavbarProps {
 }
 
 export function Navbar({ onToggleSidebar }: NavbarProps) {
-  const { user } = useAuth()
   const { changeLanguage } = useUserPreferences()
   const { t, i18n } = useTranslation(['nav', 'constants'])
 
@@ -34,13 +32,6 @@ export function Navbar({ onToggleSidebar }: NavbarProps) {
         </Button>
       )}
 
-      {user?.is_superuser && (
-        <Link to="/users">
-          <Button variant="ghost" size="icon">
-            <Users className="h-5 w-5" />
-          </Button>
-        </Link>
-      )}
       <Link to="/settings">
         <Button variant="ghost" size="icon">
           <Settings className="h-5 w-5" />

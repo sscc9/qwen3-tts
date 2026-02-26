@@ -9,7 +9,6 @@ import { Navbar } from '@/components/Navbar'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import {
   Form,
   FormControl,
@@ -18,11 +17,9 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
-import { ChangePasswordDialog } from '@/components/users/ChangePasswordDialog'
 import { useAuth } from '@/contexts/AuthContext'
 import { useUserPreferences } from '@/contexts/UserPreferencesContext'
 import { authApi } from '@/lib/api'
-import type { PasswordChangeRequest } from '@/types/auth'
 
 const createApiKeySchema = (t: (key: string) => string) => z.object({
   api_key: z.string().min(1, t('auth:validation.apiKeyRequired')),
@@ -34,8 +31,6 @@ export default function Settings() {
   const { preferences, hasAliyunKey, refetchPreferences } = useUserPreferences()
   const [showApiKey, setShowApiKey] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const [showPasswordDialog, setShowPasswordDialog] = useState(false)
-  const [isPasswordLoading, setIsPasswordLoading] = useState(false)
 
   const apiKeySchema = createApiKeySchema(t)
   type ApiKeyFormValues = z.infer<typeof apiKeySchema>
@@ -97,20 +92,6 @@ export default function Settings() {
     }
   }
 
-  const handleChangePassword = async (data: PasswordChangeRequest) => {
-    try {
-      setIsPasswordLoading(true)
-      await authApi.changePassword(data)
-      toast.success(t('settings:passwordChangeSuccess'))
-      setShowPasswordDialog(false)
-    } catch (error: any) {
-      toast.error(error.message || t('settings:passwordChangeFailed'))
-      throw error
-    } finally {
-      setIsPasswordLoading(false)
-    }
-  }
-
   if (!user || !preferences) {
     return null
   }
@@ -125,8 +106,6 @@ export default function Settings() {
             <h1 className="text-2xl sm:text-3xl font-bold">{t('settings:title')}</h1>
             <p className="text-sm sm:text-base text-muted-foreground mt-1 sm:mt-2">{t('settings:description')}</p>
           </div>
-
-
 
           <Card>
             <CardHeader className="p-4 sm:p-6">
@@ -220,35 +199,9 @@ export default function Settings() {
               </Form>
             </CardContent>
           </Card>
-
-          <Card>
-            <CardHeader className="p-4 sm:p-6">
-              <CardTitle className="text-lg sm:text-xl">{t('settings:accountInfo')}</CardTitle>
-              <CardDescription className="text-sm">{t('settings:accountInfoDescription')}</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3 sm:space-y-4 p-4 sm:p-6">
-              <div className="grid gap-1.5 sm:gap-2">
-                <Label className="text-sm sm:text-base">{t('user:username')}</Label>
-                <Input value={user.username} disabled />
-              </div>
-              <div className="grid gap-1.5 sm:gap-2">
-                <Label className="text-sm sm:text-base">{t('settings:email')}</Label>
-                <Input value={user.email} disabled />
-              </div>
-              <div>
-                <Button onClick={() => setShowPasswordDialog(true)} className="w-full sm:w-auto">{t('settings:changePassword')}</Button>
-              </div>
-            </CardContent>
-          </Card>
         </div>
       </main>
-
-      <ChangePasswordDialog
-        open={showPasswordDialog}
-        onOpenChange={setShowPasswordDialog}
-        onSubmit={handleChangePassword}
-        isLoading={isPasswordLoading}
-      />
     </div>
   )
 }
+

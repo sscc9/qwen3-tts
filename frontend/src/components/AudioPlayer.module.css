@@ -52,6 +52,11 @@
 .audioPlayerWrapper :global(.waveform-title) {
   text-align: center;
   font-size: 0.8125rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 85%;
+  margin: 0 auto;
 }
 
 .audioPlayerWrapper :global(.waveform-time) {
@@ -59,7 +64,11 @@
   font-size: 0.875rem;
   font-weight: 500;
   position: absolute;
-  right: 0;
+  right: 0.25rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: hsl(var(--background));
+  padding-left: 0.5rem;
 }
 
 .downloadButton {

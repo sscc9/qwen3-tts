@@ -9,11 +9,8 @@ import { JobProvider } from '@/contexts/JobContext'
 import { HistoryProvider } from '@/contexts/HistoryContext'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import LoadingScreen from '@/components/LoadingScreen'
-import { SuperAdminRoute } from '@/components/SuperAdminRoute'
-
 const Home = lazy(() => import('@/pages/Home'))
 const Settings = lazy(() => import('@/pages/Settings'))
-const UserManagement = lazy(() => import('@/pages/UserManagement'))
 
 
 
@@ -42,14 +39,6 @@ function App() {
                   <Route
                     path="/settings"
                     element={<Settings />}
-                  />
-                  <Route
-                    path="/users"
-                    element={
-                      <SuperAdminRoute>
-                        <UserManagement />
-                      </SuperAdminRoute>
-                    }
                   />
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
