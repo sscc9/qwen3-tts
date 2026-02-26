@@ -116,9 +116,9 @@ const HistoryItem = memo(({ job, onDelete }: HistoryItemProps) => {
       )}
 
       {job.status === 'failed' && job.error_message && (
-        <div className="flex items-start gap-2 p-2 bg-destructive/10 rounded-md">
+        <div className="flex items-start gap-2 p-2 bg-destructive/10 rounded-md overflow-hidden">
           <AlertCircle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
-          <span className="text-sm text-destructive">{job.error_message}</span>
+          <span className="text-sm text-destructive break-all line-clamp-3">{job.error_message}</span>
         </div>
       )}
 
