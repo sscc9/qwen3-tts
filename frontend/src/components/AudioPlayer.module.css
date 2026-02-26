@@ -1,0 +1,68 @@
+.audioPlayerWrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  padding: 0.75rem;
+  background: transparent;
+}
+
+.waveformContainer {
+  flex: 1;
+  min-width: 0;
+}
+
+.audioPlayerWrapper :global(.waveform-player) {
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+.audioPlayerWrapper :global(.waveform-btn) {
+  color: hsl(var(--foreground));
+  border-color: hsl(var(--border));
+  background: transparent;
+  transition: all 150ms ease;
+}
+
+.audioPlayerWrapper :global(.waveform-btn:hover) {
+  color: hsl(var(--primary));
+  border-color: hsl(var(--primary));
+}
+
+.audioPlayerWrapper :global(.waveform-canvas) {
+  border-radius: 3px;
+}
+
+.audioPlayerWrapper :global(.waveform-info) {
+  position: relative;
+  justify-content: center;
+}
+
+.audioPlayerWrapper :global(.waveform-text) {
+  text-align: center;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.audioPlayerWrapper :global(.waveform-title) {
+  text-align: center;
+  font-size: 0.8125rem;
+}
+
+.audioPlayerWrapper :global(.waveform-time) {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.875rem;
+  font-weight: 500;
+  position: absolute;
+  right: 0;
+}
+
+.downloadButton {
+  min-height: 40px;
+  min-width: 40px;
+}
