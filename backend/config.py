@@ -35,9 +35,10 @@ class Settings(BaseSettings):
 
     ALIYUN_REGION: str = Field(default="beijing")
 
-    ALIYUN_MODEL_FLASH: str = Field(default="qwen3-tts-flash-realtime")
-    ALIYUN_MODEL_VC: str = Field(default="qwen3-tts-vc-realtime-2026-01-15")
-    ALIYUN_MODEL_VD: str = Field(default="qwen3-tts-vd-realtime-2026-01-15")
+    ALIYUN_MODEL_FLASH: str = Field(default="qwen3-tts-flash")
+    ALIYUN_MODEL_INSTRUCT: str = Field(default="qwen3-tts-instruct-flash")
+    ALIYUN_MODEL_VC: str = Field(default="qwen3-tts-vc-2026-01-22")
+    ALIYUN_MODEL_VD: str = Field(default="qwen3-tts-vd-2026-01-26")
 
     DEFAULT_BACKEND: str = Field(default="aliyun")
 

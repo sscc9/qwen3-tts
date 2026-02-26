@@ -138,17 +138,14 @@ async def set_aliyun_key(
     db: Session = Depends(get_db)
 ):
     from core.security import encrypt_api_key
-    from core.tts_service import AliyunTTSBackend
 
     api_key = key_data.api_key.strip()
 
-    aliyun_backend = AliyunTTSBackend(api_key=api_key, region=settings.ALIYUN_REGION)
-    health = await aliyun_backend.health_check()
-
-    if not health.get("available", False):
+    # 只验证格式，不发起真实 API 调用（避免因阿里云 503 导致保存失败）
+    if not api_key.startswith("sk-"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid Aliyun API key. Please check your API key and try again."
+            detail="Invalid API key format. Aliyun API keys should start with 'sk-'."
         )
 
     encrypted_key = encrypt_api_key(api_key)
@@ -194,42 +191,23 @@ async def delete_aliyun_key(
     return {"message": "Aliyun API key deleted", "preferences_updated": True}
 
 @router.get("/aliyun-key/verify", response_model=AliyunKeyVerifyResponse)
-@limiter.limit("10/minute")
+@limiter.limit("30/minute")
 async def verify_aliyun_key(
     request: Request,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Session = Depends(get_db)
 ):
-    from core.security import decrypt_api_key
-    from core.tts_service import AliyunTTSBackend
-
+    # 直接根据数据库记录判断是否已设置 key，不发起真实 API 调用
     if not current_user.aliyun_api_key:
         return AliyunKeyVerifyResponse(
             valid=False,
             message="No Aliyun API key configured"
         )
 
-    api_key = decrypt_api_key(current_user.aliyun_api_key)
-
-    if not api_key:
-        return AliyunKeyVerifyResponse(
-            valid=False,
-            message="Failed to decrypt API key"
-        )
-
-    aliyun_backend = AliyunTTSBackend(api_key=api_key, region=settings.ALIYUN_REGION)
-    health = await aliyun_backend.health_check()
-
-    if health.get("available", False):
-        return AliyunKeyVerifyResponse(
-            valid=True,
-            message="Aliyun API key is valid and working"
-        )
-    else:
-        return AliyunKeyVerifyResponse(
-            valid=False,
-            message="Aliyun API key is not working. Please check your API key."
-        )
+    return AliyunKeyVerifyResponse(
+        valid=True,
+        message="Aliyun API key is configured"
+    )
 
 @router.get("/preferences", response_model=UserPreferencesResponse)
 @limiter.limit("30/minute")

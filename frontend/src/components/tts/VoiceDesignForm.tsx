@@ -196,7 +196,7 @@ const VoiceDesignForm = forwardRef<VoiceDesignFormHandle>((_props, ref) => {
         <Textarea
           {...register('text')}
           placeholder={t('textPlaceholder')}
-          className="min-h-[40px] md:min-h-[60px]"
+          className="min-h-[40px] md:min-h-[60px] relative focus:z-10"
         />
         {errors.text && (
           <p className="text-sm text-destructive">{errors.text.message}</p>
@@ -208,7 +208,7 @@ const VoiceDesignForm = forwardRef<VoiceDesignFormHandle>((_props, ref) => {
         <Textarea
           {...register('instruct')}
           placeholder={t('designDescriptionPlaceholder')}
-          className="min-h-[40px] md:min-h-[60px]"
+          className="min-h-[40px] md:min-h-[60px] relative focus:z-10"
         />
         <PresetSelector
           presets={PRESET_VOICE_DESIGNS}

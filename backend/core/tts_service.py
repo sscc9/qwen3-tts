@@ -2,7 +2,6 @@ import time
 import logging
 from abc import ABC, abstractmethod
 from typing import Tuple, Optional
-import websockets
 import json
 import base64
 
@@ -31,39 +30,53 @@ class AliyunTTSBackend(TTSBackend):
     def __init__(self, api_key: str, region: str):
         self.api_key = api_key
         self.region = region
-        self.ws_url = self._get_ws_url(region)
-        self.http_url = self._get_http_url(region)
+        self.tts_url = self._get_tts_url(region)
+        self.customization_url = self._get_customization_url(region)
 
-    def _get_ws_url(self, region: str) -> str:
+    def _get_tts_url(self, region: str) -> str:
+        """非流式 TTS 合成接口"""
         if region == "beijing":
-            return "wss://dashscope.aliyuncs.com/api-ws/v1/realtime"
+            return "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
         else:
-            return "wss://dashscope-intl.aliyuncs.com/api-ws/v1/realtime"
+            return "https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
 
-    def _get_http_url(self, region: str) -> str:
+    def _get_customization_url(self, region: str) -> str:
+        """声音复刻 / 声音设计管理接口"""
         if region == "beijing":
             return "https://dashscope.aliyuncs.com/api/v1/services/audio/tts/customization"
         else:
             return "https://dashscope-intl.aliyuncs.com/api/v1/services/audio/tts/customization"
 
+    # 方言音色列表 - 这些只能用 Flash 模型
+    DIALECT_SPEAKERS = {
+        "Jada", "Dylan", "Li", "Marcus", "Roy",
+        "Peter", "Sunny", "Eric", "Rocky", "Kiki",
+    }
+
     async def generate_custom_voice(self, params: dict) -> Tuple[bytes, int]:
         from core.config import settings
 
         voice = self._map_speaker(params['speaker'])
-        
-        # Route to correct model based on voice ID contents
+        instruct = params.get('instruct', '')
+
+        # Route to correct model based on voice type
         if "clone" in voice or "-vc-" in voice:
             model = settings.ALIYUN_MODEL_VC
         elif "design" in voice or "-vd-" in voice:
             model = settings.ALIYUN_MODEL_VD
-        else:
+        elif voice in self.DIALECT_SPEAKERS:
+            # 方言音色不支持 Instruct-Flash，使用 Flash
             model = settings.ALIYUN_MODEL_FLASH
+        else:
+            # 普通话/外语音色使用 Instruct-Flash（支持指令控制）
+            model = settings.ALIYUN_MODEL_INSTRUCT
 
-        return await self._generate_via_websocket(
+        return await self._generate_via_http(
             model=model,
             text=params['text'],
             voice=voice,
-            language=params['language']
+            language=params['language'],
+            instruct=instruct if model == settings.ALIYUN_MODEL_INSTRUCT else None,
         )
 
     async def generate_voice_design(self, params: dict, saved_voice_id: Optional[str] = None) -> Tuple[bytes, int]:
@@ -83,11 +96,11 @@ class AliyunTTSBackend(TTSBackend):
             )
             model = settings.ALIYUN_MODEL_VD
 
-        return await self._generate_via_websocket(
+        return await self._generate_via_http(
             model=model,
             text=params['text'],
             voice=voice_id,
-            language=params['language']
+            language=params['language'],
         )
 
     async def generate_voice_clone(self, params: dict, ref_audio_bytes: bytes) -> Tuple[bytes, int, str]:
@@ -97,62 +110,70 @@ class AliyunTTSBackend(TTSBackend):
 
         model = settings.ALIYUN_MODEL_VC
 
-        audio_bytes, sample_rate = await self._generate_via_websocket(
+        audio_bytes, sample_rate = await self._generate_via_http(
             model=model,
             text=params['text'],
             voice=voice_id,
-            language=params['language']
+            language=params['language'],
         )
         return audio_bytes, sample_rate, voice_id
 
-    async def _generate_via_websocket(
+    async def _generate_via_http(
         self,
         model: str,
         text: str,
         voice: str,
-        language: str
+        language: str,
+        instruct: Optional[str] = None,
     ) -> Tuple[bytes, int]:
-        audio_chunks = []
+        """通过 HTTP 非流式接口生成语音"""
+        import httpx
 
-        url = f"{self.ws_url}?model={model}"
-        headers = {"Authorization": f"Bearer {self.api_key}"}
+        payload = {
+            "model": model,
+            "input": {
+                "text": text,
+                "voice": voice,
+                "language_type": language,
+            }
+        }
 
-        async with websockets.connect(url, additional_headers=headers) as ws:
-            await ws.send(json.dumps({
-                "type": "session.update",
-                "session": {
-                    "mode": "server_commit",
-                    "voice": voice,
-                    "language_type": language,
-                    "response_format": "pcm",
-                    "sample_rate": 24000
-                }
-            }))
+        # Instruct-Flash 模型支持指令控制
+        if instruct and "instruct" in model:
+            payload["input"]["instructions"] = instruct
+            payload["input"]["optimize_instructions"] = True
 
-            await ws.send(json.dumps({
-                "type": "input_text_buffer.append",
-                "text": text
-            }))
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
 
-            await ws.send(json.dumps({
-                "type": "session.finish"
-            }))
+        logger.info(f"TTS HTTP request: model={model}, voice={voice}, lang={language}, instruct={'yes' if instruct else 'no'}")
 
-            async for message in ws:
-                event = json.loads(message)
-                event_type = event.get('type')
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(self.tts_url, json=payload, headers=headers, timeout=120)
 
-                if event_type == 'response.audio.delta':
-                    audio_data = base64.b64decode(event['delta'])
-                    audio_chunks.append(audio_data)
-                elif event_type == 'session.finished':
-                    break
-                elif event_type == 'error':
-                    raise RuntimeError(f"Aliyun API error: {event.get('error')}")
+            if resp.status_code != 200:
+                logger.error(f"TTS HTTP failed with status {resp.status_code}")
+                logger.error(f"Response body: {resp.text}")
+                raise RuntimeError(f"Aliyun TTS API error: {resp.status_code} - {resp.text}")
 
-        pcm_data = b''.join(audio_chunks)
-        wav_bytes = self._pcm_to_wav(pcm_data, 24000)
-        return wav_bytes, 24000
+            result = resp.json()
+
+            # 获取音频 URL 并下载
+            audio_url = result.get("output", {}).get("audio", {}).get("url")
+            if not audio_url:
+                raise RuntimeError(f"No audio URL in response: {result}")
+
+            logger.info(f"TTS audio URL received, downloading...")
+
+            audio_resp = await client.get(audio_url, timeout=60)
+            audio_resp.raise_for_status()
+
+            wav_bytes = audio_resp.content
+            logger.info(f"TTS audio downloaded: {len(wav_bytes)} bytes")
+
+            return wav_bytes, 24000
 
     async def _create_voice_clone(self, ref_audio_bytes: bytes) -> str:
         from core.config import settings
@@ -179,7 +200,7 @@ class AliyunTTSBackend(TTSBackend):
         logger.info(f"Voice clone request payload (audio truncated): {{'model': '{payload['model']}', 'input': {{'action': '{payload['input']['action']}', 'target_model': '{payload['input']['target_model']}', 'preferred_name': '{payload['input']['preferred_name']}', 'audio': '<truncated>'}}}}")
 
         async with httpx.AsyncClient() as client:
-            resp = await client.post(self.http_url, json=payload, headers=headers, timeout=60)
+            resp = await client.post(self.customization_url, json=payload, headers=headers, timeout=60)
 
             if resp.status_code != 200:
                 logger.error(f"Voice clone failed with status {resp.status_code}")
@@ -217,7 +238,7 @@ class AliyunTTSBackend(TTSBackend):
         logger.info(f"Voice design request payload: {payload}")
 
         async with httpx.AsyncClient() as client:
-            resp = await client.post(self.http_url, json=payload, headers=headers, timeout=60)
+            resp = await client.post(self.customization_url, json=payload, headers=headers, timeout=60)
 
             if resp.status_code != 200:
                 logger.error(f"Voice design failed with status {resp.status_code}")
@@ -254,7 +275,7 @@ class AliyunTTSBackend(TTSBackend):
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.post(
-                    self.http_url,
+                    self.customization_url,
                     json=payload,
                     headers=headers,
                     timeout=30.0
@@ -270,63 +291,41 @@ class AliyunTTSBackend(TTSBackend):
                 return False
 
     async def health_check(self) -> dict:
+        """轻量级 API Key 验证 - 不生成完整音频，仅检测 key 格式和连通性"""
+        # 检查 key 格式
+        if not self.api_key or not self.api_key.startswith("sk-"):
+            return {"available": False, "error": "invalid_key_format"}
+
+        import httpx
         try:
-            from core.config import settings
-            url = f"{self.ws_url}?model={settings.ALIYUN_MODEL_FLASH}"
-            headers = {"Authorization": f"Bearer {self.api_key}"}
-
-            async with websockets.connect(url, additional_headers=headers, close_timeout=3) as ws:
-                await ws.send(json.dumps({
-                    "type": "session.update",
-                    "session": {
-                        "mode": "server_commit",
-                        "voice": "Cherry",
-                        "language_type": "zh",
-                        "response_format": "pcm",
-                        "sample_rate": 24000
-                    }
-                }))
-
-                await ws.send(json.dumps({
-                    "type": "input_text_buffer.append",
-                    "text": "测试"
-                }))
-
-                await ws.send(json.dumps({
-                    "type": "session.finish"
-                }))
-
-                async for message in ws:
-                    event = json.loads(message)
-                    event_type = event.get('type')
-
-                    if event_type == 'error':
-                        return {"available": False}
-                    elif event_type in ['response.audio.delta', 'session.finished']:
-                        return {"available": True}
-
-            return {"available": True}
+            # 使用极短文本触发最小开销请求，通过 HTTP 状态码确认 key 有效性
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            }
+            payload = {
+                "model": "qwen3-tts-flash",
+                "input": {
+                    "text": "测",
+                    "voice": "Cherry",
+                    "language_type": "zh",
+                }
+            }
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(
+                    self.tts_url, json=payload, headers=headers, timeout=20
+                )
+                # 401 = key invalid, 200 = ok, 400 = param error but key ok
+                if resp.status_code == 401:
+                    return {"available": False, "error": "unauthorized"}
+                return {"available": resp.status_code in (200, 400)}
         except Exception as e:
             logger.warning(f"Aliyun health check failed: {e}")
             return {"available": False}
 
     @staticmethod
-    def _pcm_to_wav(pcm_data: bytes, sample_rate: int) -> bytes:
-        import io
-        import wave
-
-        wav_buffer = io.BytesIO()
-        with wave.open(wav_buffer, 'wb') as wav_file:
-            wav_file.setnchannels(1)
-            wav_file.setsampwidth(2)
-            wav_file.setframerate(sample_rate)
-            wav_file.writeframes(pcm_data)
-
-        wav_buffer.seek(0)
-        return wav_buffer.read()
-
-    @staticmethod
     def _map_speaker(local_speaker: str) -> str:
+        """Map legacy speaker names to official Qwen3 TTS voice IDs."""
         mapping = {
             "Ono_Anna": "Ono Anna",
             "Female": "Cherry",
