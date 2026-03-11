@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import Union
 import numpy as np
 import soundfile as sf
-from scipy import signal
 
 
 def validate_ref_audio(audio_data: bytes, max_size_mb: int = 10) -> bool:
@@ -45,7 +44,10 @@ def resample_audio(audio_array: np.ndarray, orig_sr: int, target_sr: int = 24000
         return audio_array
 
     num_samples = int(len(audio_array) * target_sr / orig_sr)
-    resampled = signal.resample(audio_array, num_samples)
+    # Use numpy interpolation instead of scipy.signal.resample
+    # (scipy hangs on import on some Windows systems)
+    indices = np.linspace(0, len(audio_array) - 1, num_samples)
+    resampled = np.interp(indices, np.arange(len(audio_array)), audio_array)
     return resampled.astype(np.float32)
 
 
